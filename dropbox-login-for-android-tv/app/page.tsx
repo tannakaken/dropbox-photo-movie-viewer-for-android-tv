@@ -3,8 +3,16 @@
 import { DEFAULT_CALLBACK_URL } from "@/constants";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 export default function Home() {
+  return <Suspense fallback={<p>loading...</p>}>
+    <Contents />
+  </Suspense>
+}
+
+const Contents = () => {
+  // useSearchParamsを使った場合、Suspenseに包む必要があることを忘れるな。
   const searchParams = useSearchParams();
   const state = searchParams.get('state');
 
@@ -31,7 +39,7 @@ export default function Home() {
   };
 
   if (state === null) {
-    <h1>Error</h1>
+    <h1>Not found!</h1>
   }
 
   return (
