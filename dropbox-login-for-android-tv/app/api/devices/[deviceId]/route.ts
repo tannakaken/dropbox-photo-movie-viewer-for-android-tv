@@ -17,7 +17,7 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
         const token = authorization.substring(PREFIX.length);
-        if (!isValidAccessToken(token, deviceId)) {
+        if (!(await isValidAccessToken(token, deviceId))) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
         const deviceData = await getDeviceData(deviceId);
@@ -78,7 +78,7 @@ export async function DELETE(
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const token = authorization.substring(PREFIX.length);
-    if (!isValidAccessToken(token, deviceId)) {
+    if (!(await isValidAccessToken(token, deviceId))) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     const deviceData = await getDeviceData(deviceId);

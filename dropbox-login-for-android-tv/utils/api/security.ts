@@ -10,3 +10,24 @@ import crypto from "crypto";
 export function generateSecureRandomString(byteLength = 32) {
   return crypto.randomBytes(byteLength).toString("base64url");
 }
+
+export const generateSalt = () => {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+export const hashToken = (token: string, salt: string) => {
+  return crypto.createHash("sha256")
+      .update(process.env.TOKEN_HASH_PEPPER!)
+      .update(salt)
+      .update(token)
+      .digest("hex")
+}
+
+export const isValidToken = (tokenHash: string, salt: string, token: string) => {
+  const hash = crypto.createHash("sha256")
+      .update(process.env.TOKEN_HASH_PEPPER!)
+      .update(salt)
+      .update(token)
+      .digest("hex")
+  return crypto.timingSafeEqual(Buffer.from(tokenHash), Buffer.from(hash));
+}

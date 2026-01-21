@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { setFlowData } from "@/utils/api/redis";
-import { generateSecureRandomString } from '@/utils/api/security';
+import { generateSalt, generateSecureRandomString, hashToken } from '@/utils/api/security';
 
 export async function POST(request: NextRequest) {
     try {
@@ -17,22 +17,24 @@ export async function POST(request: NextRequest) {
          * アクセスするさいに必要なトークン。これはhttpのヘッダに保存するので、httpsにすれば外に漏れる危険性は少ない。
          * 一時的なもの。
          */
-        const token = generateSecureRandomString();
+        const tmpToken = generateSecureRandomString();
+        const salt = generateSalt();
+        const tmpTokenHash = hashToken(tmpToken, salt);
         const body = await request.json();
         /**
          * デバイスから送られてきたID
          * アプリ初回起動時に生成して送信する。
          */
-        const deviceGenerateId = body["device_generate_id"];
+        const deviceGenerateId = body["deviceGenerateId"];
 
         if (!deviceGenerateId) {
              return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
         }
 
-        await setFlowData(state, {token, deviceGenerateId, completed: false}, true);
+        await setFlowData(state, {tmpTokenHash, salt, deviceGenerateId, completed: false}, true);
 
         // Handle POST request
-        return NextResponse.json({ state, token });
+        return NextResponse.json({ state, tmpToken });
     } catch (error) {
         console.error(error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

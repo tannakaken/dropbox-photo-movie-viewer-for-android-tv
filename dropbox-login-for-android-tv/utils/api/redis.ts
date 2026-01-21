@@ -1,7 +1,7 @@
 import { DeviceData } from '@/models/device';
 import { FlowData } from '@/models/flow';
 import { Redis } from '@upstash/redis';
-import { generateSecureRandomString } from './security';
+import { generateSalt, generateSecureRandomString, hashToken, isValidToken } from './security';
 
 const redisClient = new Redis({
     url: process.env.UPSTASH_REDIS_REST_URL!,
@@ -73,7 +73,12 @@ export const refreshDeviceData = async (deviceId: string) => {
     await redisClient.expire(deviceIdKey, REFRESH_TOKEN_TTL_SECONDS + 300);
 }
 
-const constructAccessTokenKey = (accessToken: string): string => `android-tv-dropbox-access-token-${accessToken}`;
+const constructAccessTokenKey = (deviceId: string): string => `android-tv-dropbox-access-token-${deviceId}`;
+
+type Token = {
+    tokenHash: string;
+    salt: string;
+}
 
 /**
  * アクセストークンの生存期間は1日24 * 60 * 60
@@ -82,36 +87,48 @@ const constructAccessTokenKey = (accessToken: string): string => `android-tv-dro
  */
 const ACCSESS_TOKEN_TTL_SECONDS = 86400;
 export const setAccessToken = async (accessToken: string, deviceId: string) => {
-    const accessTokenKey = constructAccessTokenKey(accessToken);
+    const accessTokenKey = constructAccessTokenKey(deviceId);
+    const salt = generateSalt();
+    const tokenHash = hashToken(accessToken, salt);
     await redisClient.set(
         accessTokenKey,
-        deviceId,
+        {
+            tokenHash,
+            salt,
+        },
     );
     await redisClient.expire(accessTokenKey, ACCSESS_TOKEN_TTL_SECONDS);
 }
 export const isValidAccessToken = async (accessToken: string, deviceId: string) => {
-    const accessTokenKey = constructAccessTokenKey(accessToken);
-    const result = await redisClient.get<string>(accessTokenKey);
-    return result === deviceId;
+    const accessTokenKey = constructAccessTokenKey(deviceId);
+    const result = await redisClient.get<Token>(accessTokenKey);
+    if (result) {
+        return isValidToken(result.tokenHash, result.salt, accessToken);
+    }
+    return false;
 }
 
-const constructRefreshTokenKey = (refreshToken: string): string => `android-tv-dropbox-refresh-token-${refreshToken}`;
+const constructRefreshTokenKey = (deviceId: string): string => `android-tv-dropbox-refresh-token-${deviceId}`;
 export const setRefreshToken = async (refreshToken: string, deviceId: string) => {
-    const refreshTokenKey = constructRefreshTokenKey(refreshToken);
+    const refreshTokenKey = constructRefreshTokenKey(deviceId);
+    const salt = generateSalt();
+    const tokenHash = hashToken(refreshToken, salt);
     await redisClient.set(
         refreshTokenKey,
-        deviceId,
+        {
+            tokenHash,
+            salt,
+        },
     );
     await redisClient.expire(refreshTokenKey, REFRESH_TOKEN_TTL_SECONDS);
 }
 export const isValidRefreshToken = async (refreshToken: string, deviceId: string) => {
-    const refreshTokenKey = constructRefreshTokenKey(refreshToken);
-    const result = await redisClient.get<string>(refreshTokenKey);
-    return result === deviceId;
-}
-export const deleteRefreshToken = async (refreshToken: string) => {
-    const refreshTokenKey = constructRefreshTokenKey(refreshToken);
-    await redisClient.del(refreshTokenKey);
+    const refreshTokenKey = constructRefreshTokenKey(deviceId);
+    const result = await redisClient.get<Token>(refreshTokenKey);
+     if (result) {
+        return isValidToken(result.tokenHash, result.salt, refreshToken);
+    }
+    return false;
 }
 
 export const generateTokens = async (deviceId: string) => {

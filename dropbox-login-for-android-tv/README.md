@@ -35,14 +35,14 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
-## テスト
+## curlによるテスト
 
 フロー開始
-    curl -X POST http://localhost:3000/api/auth/flows -d'{"device_generate_id": "123"}'
+    curl -X POST http://localhost:3000/api/auth/flows -d'{"deviceGenerateId": "123"}'
 
 レスポンス
 
-    {"state":"sample_state","token":"sample_token"}
+    {"state":"sample_state","tmpToken":"sampleTmpToken"}
 
 ログインページ
 
@@ -50,7 +50,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 進捗確認
 
-    curl http://localhost:3000/api/auth/flows/sample_state -H "Authorization: " -H "X-Tannakaken-Android-TV-Dropbox-Device-Generate-ID: 123"
+    curl http://localhost:3000/api/auth/flows/sample_state -H "Authorization: Bearer sampleTmpToken" -H "X-Tannakaken-Android-TV-Dropbox-Device-Generate-ID: 123"
 
 未認可の場合のレスポンス
 
@@ -58,8 +58,20 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
     
 認可後のレスポンス
 
-    {"completed":true,　"deviceId":"c1dda73f-fec2-4766-889b-75d43d633acb"}
+    {"completed":true,　"deviceId":"sampleDeviceId", "accessToken": "sampleAccessToken", "refreshToken": "sampleRefreshToken"}
 
 Dropboxアクセストークン取得
 
-    curl http://localhost:3000/api/auth/flows/
+    curl http://localhost:3000/api/devices/sampleDeviceId -H "Authorization: Bearer sampleAccessToken" -H "X-Tannakaken-Android-TV-Dropbox-Device-Generate-ID: 123"
+
+レスポンス
+
+    {"dropboxAccessToken": "sampleDropboxAccessToken"}
+
+トークンのレフレッシュ
+
+    curl -X POST http://localhost:3000/api/auth/tokens -H "X-Tannakaken-Android-TV-Dropbox-Device-Generate-ID: 123" -d'{"deviceId": "sampleDeviceId", "refreshToken": "sampleRefreshToken"}'
+
+レスポンス
+
+    {"accessToken": "newAccessToken", "refreshToken": "newRefreshToken"}

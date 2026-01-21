@@ -1,5 +1,6 @@
 import { AUTHORIZATION_HEADER_KEY, DEVICE_GENERATE_ID_HEADER_KEY } from '@/constants';
 import { deleteFlowData, generateTokens, getFlowData, setDeviceData } from '@/utils/api/redis';
+import { isValidToken } from '@/utils/api/security';
 import { NextRequest, NextResponse } from 'next/server';
 import {v4 as uuidv4} from 'uuid';
 
@@ -15,7 +16,7 @@ export async function GET(
         }
         const deviceGenerateId = request.headers.get(DEVICE_GENERATE_ID_HEADER_KEY);
         if (flowdata.deviceGenerateId !== deviceGenerateId) {
-            return NextResponse.json({ error: 'Not Found' }, { status: 404 });
+            return NextResponse.json({ error: `Not Found` }, { status: 404 });
         }
         const authorization = request.headers.get(AUTHORIZATION_HEADER_KEY);
         const PREFIX = "Bearer ";
@@ -23,7 +24,7 @@ export async function GET(
             return NextResponse.json({ error: 'Not Found' }, { status: 404 });
         }
         const token = authorization.substring(PREFIX.length);
-        if (token !== flowdata.token) {
+        if (!isValidToken(flowdata.tmpTokenHash, flowdata.salt, token)) {
             return NextResponse.json({ error: 'Not Found' }, { status: 404 });
         }
         if (!flowdata.completed) {
@@ -67,7 +68,7 @@ export async function DELETE(
         return NextResponse.json({ error: 'Not Found' }, { status: 404 });
     }
     const token = authorization.substring(PREFIX.length);
-    if (token !== flowdata.token) {
+    if (!isValidToken(flowdata.tmpTokenHash, flowdata.salt, token)) {
         return NextResponse.json({ error: 'Not Found' }, { status: 404 });
     }
     deleteFlowData(state);

@@ -1,5 +1,5 @@
 import { DEVICE_GENERATE_ID_HEADER_KEY } from '@/constants';
-import { deleteRefreshToken, generateTokens, getDeviceData, isValidRefreshToken, refreshDeviceData } from '@/utils/api/redis';
+import { generateTokens, getDeviceData, isValidRefreshToken, refreshDeviceData } from '@/utils/api/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
 type TokenRequest = {
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
         if (!deviceId || !refreshToken) {
             return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
         }
-        if (!isValidRefreshToken(refreshToken, deviceId)) {
+        if (!(await isValidRefreshToken(refreshToken, deviceId))) {
             return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
         }
         const deviceData = await getDeviceData(deviceId);
@@ -30,9 +30,8 @@ export async function POST(request: NextRequest) {
         if (deviceData.deviceGenerateId !== deviceGenerateId) {
             return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
         }
-        const newTokens = generateTokens(deviceId);
-        deleteRefreshToken(refreshToken);
-        refreshDeviceData(deviceId);
+        const newTokens = await generateTokens(deviceId);
+        await refreshDeviceData(deviceId);
         return NextResponse.json(newTokens);
     } catch (error) {
         console.error(error);

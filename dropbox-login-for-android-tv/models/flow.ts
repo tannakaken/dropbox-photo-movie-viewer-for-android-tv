@@ -1,5 +1,6 @@
 export type FlowData = {
-    token: string;
+    tmpTokenHash: string;
+    salt: string;
     deviceGenerateId: string;
 } & ({
     completed: false;
