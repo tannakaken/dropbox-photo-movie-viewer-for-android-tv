@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { setFlowData } from "@/utils/api/redis";
 import { generateSalt, generateSecureRandomString, hashToken } from '@/utils/api/security';
+import { FlowRequest, FlowResponse } from '@/models/flow';
+import { ErrorResponse } from '@/models/error';
 
 export async function POST(request: NextRequest) {
     try {
@@ -20,23 +22,23 @@ export async function POST(request: NextRequest) {
         const tmpToken = generateSecureRandomString();
         const salt = generateSalt();
         const tmpTokenHash = hashToken(tmpToken, salt);
-        const body = await request.json();
+        const body = await request.json() as FlowRequest;
         /**
          * デバイスから送られてきたID
          * アプリ初回起動時に生成して送信する。
          */
-        const deviceGenerateId = body["deviceGenerateId"];
+        const deviceGenerateId = body.deviceGenerateId;
 
         if (!deviceGenerateId) {
-             return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
+             return NextResponse.json<ErrorResponse>({ error: 'Bad Request' }, { status: 400 });
         }
 
         await setFlowData(state, {tmpTokenHash, salt, deviceGenerateId, completed: false}, true);
 
         // Handle POST request
-        return NextResponse.json({ state, tmpToken });
+        return NextResponse.json<FlowResponse>({ state, tmpToken });
     } catch (error) {
         console.error(error);
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+        return NextResponse.json<ErrorResponse>({ error: 'Internal server error' }, { status: 500 });
     }
 }

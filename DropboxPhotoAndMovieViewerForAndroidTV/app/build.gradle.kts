@@ -1,7 +1,23 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt.android)
+}
+
+val localProperties = Properties()
+// local.propertiesファイルに設定項目を書き込む。
+// local.propertiesはVCS二は登録しない。
+// local.propertiesファイルには「このファイルを編集するな」と書いてあるが、
+// それは「Android Studioの生成した行を編集するな」という意味で、新しい行を加えるのは問題ないようだ。
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
 }
 
 android {
@@ -14,7 +30,12 @@ android {
         targetSdk = 33
         versionCode = 1
         versionName = "1.0"
-
+        // BuildConfigオブジェクトに追加する。
+        buildConfigField(
+            "String",
+            "API_BASE_URL",
+            "\"${localProperties.getProperty("api.base.url", "")}\""
+        )
     }
 
     buildTypes {
@@ -35,11 +56,14 @@ android {
     }
     buildFeatures {
         compose = true
+        // BuildConfigオブジェクトを使うのに必要。
+        // BuildConfigオブジェクトは一度ビルドしないと生成されないので、
+        // 一度プロジェクトをクリーンして、ソースコードをコンパイル可能な状態にしてビルドすると生成されている。
+        buildConfig = true
     }
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(platform(libs.androidx.compose.bom))
@@ -56,4 +80,14 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.kotlinx.serialization.json)
+
+    implementation(libs.bundles.hilt)
+    ksp(libs.hilt.compiler)
 }

@@ -1,5 +1,5 @@
 import { DEFAULT_BASE_URL, DEFAULT_CALLBACK_URL, DROPBOX_TOKEN_URL } from '@/constants';
-import { DropboxTokenResponse } from '@/models/dropbox_token';
+import { TokenResponseFromDropbox } from '@/models/dropbox_token';
 import { getFlowData, setFlowData } from '@/utils/api/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch token', details: data }, { status: response.status });
     }
 
-    const dropboxTokenResponse = data as DropboxTokenResponse;
+    const dropboxTokenResponse = data as TokenResponseFromDropbox;
 
     await setFlowData(state, {
       ...flowData,
