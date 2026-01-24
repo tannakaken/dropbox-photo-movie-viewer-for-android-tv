@@ -19,7 +19,7 @@ export async function GET(
         }
         const deviceGenerateId = request.headers.get(DEVICE_GENERATE_ID_HEADER_KEY);
         if (flowdata.deviceGenerateId !== deviceGenerateId) {
-            return NextResponse.json<ErrorResponse>({ error: `Not Found2` }, { status: 404 });
+            return NextResponse.json<ErrorResponse>({ error: `Not Found2${flowdata.deviceGenerateId}:${deviceGenerateId}` }, { status: 404 });
         }
         const authorization = request.headers.get(AUTHORIZATION_HEADER_KEY);
         const PREFIX = "Bearer ";

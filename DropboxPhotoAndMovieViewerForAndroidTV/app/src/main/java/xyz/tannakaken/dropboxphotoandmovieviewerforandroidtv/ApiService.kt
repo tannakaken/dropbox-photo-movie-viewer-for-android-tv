@@ -12,6 +12,8 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.headers
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.util.InternalAPI
+import io.ktor.util.toByteArray
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -56,6 +58,7 @@ class ApiService(private val baseUrl: String) {
         }
     }
 
+    @OptIn(InternalAPI::class)
     suspend fun checkStatus(state: String, deviceGenerateId: String, tmpToken: String): FlowCheckResponse {
         val checkStatusUrl = "$baseUrl/api/auth/flows/$state"
         Log.d("ApiService", checkStatusUrl)
@@ -73,6 +76,8 @@ class ApiService(private val baseUrl: String) {
         return client.use { clientLocal ->
             val response = clientLocal.get(checkStatusUrl)
             Log.d("ApiService", response.status.toString())
+            val bytes = response.content.toByteArray()
+            Log.d("ApiService", String(bytes))
             response.body()
         }
     }
