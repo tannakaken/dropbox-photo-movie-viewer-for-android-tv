@@ -1,6 +1,6 @@
 "use client";
 
-import { DEFAULT_CALLBACK_URL } from "@/constants";
+import { DEFAULT_BASE_URL, CALLBACK_PATH } from "@/constants";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -28,7 +28,8 @@ const Contents = () => {
         return;
     }
     
-    const redirectUri = process.env.NEXT_PUBLIC_DROPBOX_REDIRECT_URI || DEFAULT_CALLBACK_URL;
+    const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || DEFAULT_BASE_URL;
+    const redirectUri = `${BASE_URL}${CALLBACK_PATH}`;
     /**
      * refresh_tokenを取得するためにtoken_access_type=offlineが必要
      */

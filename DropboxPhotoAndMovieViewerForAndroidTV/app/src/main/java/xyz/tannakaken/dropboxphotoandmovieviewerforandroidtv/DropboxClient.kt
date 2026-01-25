@@ -2,6 +2,10 @@ package xyz.tannakaken.dropboxphotoandmovieviewerforandroidtv
 
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.logging.DEFAULT
+import io.ktor.client.plugins.logging.LogLevel
+import io.ktor.client.plugins.logging.Logger
+import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -17,7 +21,7 @@ data class ListFolderRequest(
 
 @Serializable
 data class Metadata(
-    val tag: String,
+    val tag: String? = null,
     val name: String,
     val path_lower: String? = null,
     val path_display: String? = null,
@@ -32,7 +36,12 @@ data class ListFolderResponse(
 )
 
 class DropboxClient(private val accessToken: String) {
-    private val client = HttpClient(CIO)
+    private val client = HttpClient(CIO) {
+        install(Logging) {
+            logger = Logger.DEFAULT
+            level = LogLevel.ALL
+        }
+    }
     private val json = Json { ignoreUnknownKeys = true }
 
     suspend fun listRootFolders(): List<Metadata> {

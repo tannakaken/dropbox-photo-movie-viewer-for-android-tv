@@ -1,5 +1,5 @@
 export const DEFAULT_BASE_URL = 'http://localhost:3000';
-export const DEFAULT_CALLBACK_URL = 'http://localhost:3000/api/auth/callback';
+export const CALLBACK_PATH = '/api/auth/callback';
 export const DROPBOX_TOKEN_URL = 'https://api.dropbox.com/oauth2/token';
 /**
  * httpの独自ヘッダのキーをX-Somethingのような名前にすることは現在は推奨されていない。

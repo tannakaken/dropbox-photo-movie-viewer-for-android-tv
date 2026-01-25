@@ -1,4 +1,4 @@
-import { DEFAULT_BASE_URL, DEFAULT_CALLBACK_URL, DROPBOX_TOKEN_URL } from '@/constants';
+import { CALLBACK_PATH, DEFAULT_BASE_URL, DROPBOX_TOKEN_URL } from '@/constants';
 import { TokenResponseFromDropbox } from '@/models/dropbox_token';
 import { getFlowData, setFlowData } from '@/utils/api/redis';
 import { NextRequest, NextResponse } from 'next/server';
@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
   }
 
   const { NEXT_PUBLIC_DROPBOX_APP_KEY, DROPBOX_APP_SECRET } = process.env;
-  const NEXT_PUBLIC_DROPBOX_REDIRECT_URI = process.env.NEXT_PUBLIC_DROPBOX_REDIRECT_URI || DEFAULT_CALLBACK_URL;
-
+  const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || DEFAULT_BASE_URL;
+  const NEXT_PUBLIC_DROPBOX_REDIRECT_URI = `${BASE_URL}${CALLBACK_PATH}`;
 
   if (!NEXT_PUBLIC_DROPBOX_APP_KEY || !DROPBOX_APP_SECRET) {
     console.error('Missing Dropbox environment variables');
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
       completed: true,
       dropboxRefreshToken: dropboxTokenResponse.refresh_token,
     });
-    const BASE_URL = process.env.NEXT_AUTH_URL || DEFAULT_BASE_URL;
+    const BASE_URL = process.env.NEXT_BASE_URL || DEFAULT_BASE_URL;
     return NextResponse.redirect(new URL('/success', BASE_URL));
   } catch (error) {
     console.error('Error during token exchange:', error);
