@@ -61,7 +61,6 @@ export async function GET(req: NextRequest) {
       completed: true,
       dropboxRefreshToken: dropboxTokenResponse.refresh_token,
     });
-    const BASE_URL = process.env.NEXT_BASE_URL || DEFAULT_BASE_URL;
     return NextResponse.redirect(new URL('/success', BASE_URL));
   } catch (error) {
     console.error('Error during token exchange:', error);
