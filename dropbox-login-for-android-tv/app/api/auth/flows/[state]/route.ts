@@ -15,20 +15,20 @@ export async function GET(
         const { state } = await context.params;
         const flowdata = await getFlowData(state);
         if (flowdata === null) {
-            return NextResponse.json<ErrorResponse>({ error: 'Not Found1' }, { status: 404 });
+            return NextResponse.json<ErrorResponse>({ error: 'Not Found' }, { status: 404 });
         }
         const deviceGenerateId = request.headers.get(DEVICE_GENERATE_ID_HEADER_KEY);
         if (flowdata.deviceGenerateId !== deviceGenerateId) {
-            return NextResponse.json<ErrorResponse>({ error: `Not Found2${flowdata.deviceGenerateId}:${deviceGenerateId}` }, { status: 404 });
+            return NextResponse.json<ErrorResponse>({ error: 'Not Found' }, { status: 404 });
         }
         const authorization = request.headers.get(AUTHORIZATION_HEADER_KEY);
         const PREFIX = "Bearer ";
         if (!authorization?.startsWith(PREFIX)) {
-            return NextResponse.json<ErrorResponse>({ error: 'Not Found3' }, { status: 404 });
+            return NextResponse.json<ErrorResponse>({ error: 'Not Found' }, { status: 404 });
         }
         const token = authorization.substring(PREFIX.length);
         if (!isValidToken(flowdata.tmpTokenHash, flowdata.salt, token)) {
-            return NextResponse.json<ErrorResponse>({ error: 'Not Found4' }, { status: 404 });
+            return NextResponse.json<ErrorResponse>({ error: 'Not Found' }, { status: 404 });
         }
         if (!flowdata.completed) {
             return NextResponse.json<FlowCheckResponse>({ completed: false });
