@@ -1,0 +1,32 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="gradient2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#00c853;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#00a341;stop-opacity:1" />
+        </linearGradient>
+    </defs>
+
+    <!-- TV本体（Android TVカラー） -->
+    <rect x="30" y="45" width="140" height="100" rx="8" fill="url(#gradient2)"/>
+    <rect x="40" y="55" width="120" height="75" fill="#1a1a1a"/>
+
+    <!-- Dropboxボックス（画面内） -->
+    <g transform="translate(100, 92.5)">
+        <polygon points="-15,-27 0,-18 -15,-9 -30,-18" fill="#0061ff"/>
+        <polygon points="15,-27 0,-18 15,-9 30,-18" fill="#0061ff"/>
+        <polygon points="-15,-9 0,0 -15,9 -30,0" fill="#0061ff"/>
+        <polygon points="15,-9 30,0 15,9 0,0" fill="#0061ff"/>
+        <polygon points="0,3 15,12 0,21 -15,12" fill="#0061ff"/>
+    </g>
+
+    <!-- Android アンテナ風 -->
+    <line x1="75" y1="45" x2="65" y2="30" stroke="#00c853" stroke-width="4" stroke-linecap="round"/>
+    <line x1="125" y1="45" x2="135" y2="30" stroke="#00c853" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- 台座 -->
+    <rect x="85" y="147" width="30" height="8" rx="3" fill="#00c853"/>
+    <rect x="70" y="155" width="60" height="15" rx="5" fill="#00a341"/>
+
+    <!-- ステータスランプ -->
+    <circle cx="100" cy="162" r="3" fill="#ffffff" opacity="0.8"/>
+</svg>

@@ -1,5 +1,6 @@
 package xyz.tannakaken.dropboxphotoandmovieviewerforandroidtv
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +23,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.Button
-import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.ktor.client.plugins.ClientRequestException
@@ -53,9 +53,9 @@ sealed interface AuthUiState {
 
 @HiltViewModel
 class AuthViewModel @Inject constructor() : ViewModel() {
-    private val _state = MutableStateFlow<AuthUiState>(AuthUiState.Initial)
-    val state : StateFlow<AuthUiState> = _state.asStateFlow()
-    private val apiService = ApiService(BuildConfig.API_BASE_URL)
+    private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Initial)
+    val uiState : StateFlow<AuthUiState> = _uiState.asStateFlow()
+    private val apiService = ApiService(BuildConfig.API_BASE_URL, DropboxPhotoAndMovieViewerApplication.client)
     private var deviceGenerateId: String? = null
 
     private suspend fun startOauthFlow(): FlowResponse? {
@@ -64,16 +64,17 @@ class AuthViewModel @Inject constructor() : ViewModel() {
         return try {
             apiService.startOAuthFlow(uuidString)
         } catch (error: ClientRequestException) {
-            _state.value = AuthUiState.Error(clientErrorMessage)
+            _uiState.value = AuthUiState.Error(clientErrorMessage)
             null
         } catch (error: ServerResponseException) {
-            _state.value = AuthUiState.Error(serverErrorMessage)
+            _uiState.value = AuthUiState.Error(serverErrorMessage)
             null
         } catch (error: IOException) {
-            _state.value = AuthUiState.Error(networkErrorMessage)
+            Log.d("AuthScreen", error.message.orEmpty())
+            _uiState.value = AuthUiState.Error(networkErrorMessage)
             null
         } catch (error: Exception) {
-            _state.value = AuthUiState.Error(unknownErrorMessage)
+            _uiState.value = AuthUiState.Error(unknownErrorMessage)
             null
         }
     }
@@ -83,7 +84,8 @@ class AuthViewModel @Inject constructor() : ViewModel() {
             val response = startOauthFlow()
             response?.let {
                 val qrUrl = "${BuildConfig.API_BASE_URL}?state=${response.state}"
-                _state.value = AuthUiState.Waiting(
+                Log.d(TAG, qrUrl)
+                _uiState.value = AuthUiState.Waiting(
                     qrUrl = qrUrl,
                     remainingMinutes = 10
                 )
@@ -93,7 +95,7 @@ class AuthViewModel @Inject constructor() : ViewModel() {
                     deviceGenerateId = deviceGenerateId!!,
                     tmpToken = response.tmpToken)
                     .collect {result ->
-                        _state.value = when (result) {
+                        _uiState.value = when (result) {
                             is PollingResult.InProgress -> AuthUiState.Waiting(
                                 qrUrl = qrUrl,
                                 remainingMinutes = 10 - (result.elapsedSeconds / 60)
@@ -113,17 +115,21 @@ class AuthViewModel @Inject constructor() : ViewModel() {
             }
         }
     }
+
+    companion object {
+        const val TAG = "AuthViewModel"
+    }
 }
 
 
 @Composable
 fun AuthScreen(
     viewModel: AuthViewModel = hiltViewModel(),
-    onAuthorized: (deviceId: String, accessToken: String, refreshToken: String, deviceGenerateId: String) -> Unit
+    onAuthorized: suspend (deviceId: String, accessToken: String, refreshToken: String, deviceGenerateId: String) -> Unit,
 ) {
-    val state by viewModel.state.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
-    when (state) {
+    when (val state = uiState) {
         is AuthUiState.Initial -> {
             LaunchedEffect(Unit) {
                 viewModel.startAuth()
@@ -131,26 +137,24 @@ fun AuthScreen(
             LoadingScreen()
         }
         is AuthUiState.Waiting -> {
-            val s = state as AuthUiState.Waiting
             AuthWaitingScreen(
-                qrUrl = s.qrUrl,
-                remainingMinutes = s.remainingMinutes,
+                qrUrl = state.qrUrl,
+                remainingMinutes = state.remainingMinutes,
                 onRegenerate = { viewModel.startAuth() }
             )
         }
         is AuthUiState.Authorized -> {
-            val s = state as AuthUiState.Authorized
             LaunchedEffect(Unit) {
-                onAuthorized(s.deviceId, s.accessToken, s.refreshToken, s.deviceGenerateId)
+                onAuthorized(state.deviceId, state.accessToken, state.refreshToken, state.deviceGenerateId)
             }
+            LoadingScreen()
         }
         is AuthUiState.Error -> {
-            ErrorScreen((state as AuthUiState.Error).message)
+            ErrorScreen(state.message)
         }
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun AuthWaitingScreen(
     qrUrl: String,
@@ -169,7 +173,6 @@ fun AuthWaitingScreen(
             fontSize = 24.sp,
         )
         Spacer(Modifier.height(32.dp))
-        // TODO QRコードを生成
         Box(
             modifier = Modifier
                 .size(200.dp)
@@ -189,5 +192,4 @@ fun AuthWaitingScreen(
             Text("QRコード再生成")
         }
     }
-
 }
