@@ -103,4 +103,6 @@ dependencies {
     implementation(libs.bundles.media3Compose)
 
     implementation(libs.bundles.paging3)
+
+    implementation(libs.bundles.securePreference)
 }

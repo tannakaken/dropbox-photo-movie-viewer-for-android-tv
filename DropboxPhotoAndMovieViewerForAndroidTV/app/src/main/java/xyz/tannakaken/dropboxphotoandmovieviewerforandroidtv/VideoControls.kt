@@ -214,7 +214,7 @@ private fun VideoSeekBar(
                 val seekPosition = (newValue * duration).roundToLong()
                 player.seekTo(seekPosition)
             },
-            modifier = Modifier.weight(7f).fillMaxWidth().onPreviewKeyEvent(onKeyEvent),
+            modifier = Modifier.weight(6f).fillMaxWidth().onPreviewKeyEvent(onKeyEvent),
             colors = SliderDefaults.colors(
                 thumbColor = if (isFocused) Color.Unspecified else MaterialTheme.colorScheme.primary,
                 activeTrackColor = if (isFocused) Color.Unspecified else MaterialTheme.colorScheme.primary,

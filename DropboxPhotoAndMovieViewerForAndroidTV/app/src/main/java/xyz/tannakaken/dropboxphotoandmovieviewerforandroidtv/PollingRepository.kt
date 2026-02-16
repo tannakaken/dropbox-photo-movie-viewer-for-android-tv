@@ -22,9 +22,6 @@ class PollingRepository(private val apiService: ApiService) {
      * @return 処理結果のFlow
      */
     fun pollWithAdaptiveInterval(state: String, deviceGenerateId: String, tmpToken: String): Flow<PollingResult> = flow {
-        Log.d("PollingRepository", state)
-        Log.d("PollingRepository", deviceGenerateId)
-        Log.d("PollingRepository", tmpToken)
         val startTime = System.currentTimeMillis()
         val timeoutMilliseconds = 10 * 60 * 1000L // 10分
         while (true) {

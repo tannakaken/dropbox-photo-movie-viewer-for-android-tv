@@ -16,7 +16,11 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -66,23 +70,24 @@ data class MediaItem(
 )
 
 class DropboxMediaPagingSource(
-    dropboxAccessToken: String,
+    private val withRetry: WithRetry<Pair<FolderDigest, String?>>,
     private val folderPath: String,
     private val onFirstLoading: () -> Unit,
     private val onLoaded: () -> Unit,
     private val onError: (errorMessage: String?) -> Unit,
 ) : PagingSource<String, MediaItem>() {
-    private val dropboxClient = DropboxClient(dropboxAccessToken, DropboxPhotoAndMovieViewerApplication.client)
     override suspend fun load(params: LoadParams<String>): LoadResult<String, MediaItem> {
         return try {
             val cursor = params.key
-            val (digest, newCursor) = if (cursor == null) {
-                // 初回リクエスト
-                onFirstLoading()
-                dropboxClient.digestFolder(path = folderPath)
-            } else {
-                // 続きのリクエスト
-                dropboxClient.digestFolderContinue(cursor = cursor)
+            val (digest, newCursor) = withRetry { dropboxClient ->
+                if (cursor == null) {
+                    // 初回リクエスト
+                    onFirstLoading()
+                    dropboxClient.digestFolder(path = folderPath)
+                } else {
+                    // 続きのリクエスト
+                    dropboxClient.digestFolderContinue(cursor = cursor)
+                }
             }
             val mediaItems = digest.medias.map { entry ->
                 MediaItem(
@@ -90,7 +95,7 @@ class DropboxMediaPagingSource(
                     path = entry.pathDisplay ?: entry.pathLower ?: "",
                     id = entry.id,
                     duration = entry.mediaInfo?.metadata?.video?.duration,
-                    type = dropboxClient.mediaType(entry.pathDisplay ?: entry.pathLower ?: "")!!
+                    type = mediaType(entry.pathDisplay ?: entry.pathLower ?: "")!!
                 )
             }
             onLoaded()
@@ -118,20 +123,25 @@ data class MediaGridScreenUiState(
 @HiltViewModel(assistedFactory = MediaGalleryViewModel.Factory::class)
 class MediaGalleryViewModel @AssistedInject constructor(
     @Assisted private val dropboxAccessToken: String,
+    secureAuthStorage: SecureAuthStorage,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val folderPath: String = savedStateHandle["folderPath"]!!
     private val _uiState = MutableStateFlow(MediaGridScreenUiState())
+    private val withRetry = createWithRetry<Pair<FolderDigest, String?>>(dropboxAccessToken, secureAuthStorage)
     val uiState: StateFlow<MediaGridScreenUiState> = _uiState.asStateFlow()
     val filesPagingFlow = Pager(
         config = PagingConfig(
+            // DropboxのAPIはサーバー側でフィルタリングができないので、
+            // 表示したいデータを決められた数だけ取得することができない。
+            // なので、このサイズは適当な値
             pageSize = 100,
             enablePlaceholders = false,
             prefetchDistance = 10
         ),
         pagingSourceFactory = {
             DropboxMediaPagingSource(
-                dropboxAccessToken = dropboxAccessToken,
+                withRetry = withRetry,
                 folderPath = folderPath,
                 onFirstLoading = {
                     _uiState.value = MediaGridScreenUiState(firstLoading = true)
@@ -157,6 +167,7 @@ class MediaGalleryViewModel @AssistedInject constructor(
 @Composable
 fun MediaGalleryScreen(
     folderPath: String,
+    loggingOut: () -> Unit,
     onSelect: (MediaItem) -> Unit,
 ) {
     val dropboxAccessToken = LocalDropboxAccessToken.current!!
@@ -165,11 +176,17 @@ fun MediaGalleryScreen(
             factory.create(dropboxAccessToken)
         }
     )
+    var isLoggingOut by remember { mutableStateOf(false) }
     val lazyPagingItems = viewModel.filesPagingFlow.collectAsLazyPagingItems()
     val listState = rememberSaveable(
         saver = LazyGridState.Saver
     ) {
         LazyGridState()
+    }
+
+    if (isLoggingOut) {
+        LoadingScreen()
+        return
     }
     Column(
         modifier = Modifier.fillMaxSize().padding(32.dp)
@@ -177,22 +194,34 @@ fun MediaGalleryScreen(
         Row(
             modifier = Modifier.weight(1f).fillMaxSize().padding(5.dp)
         ) {
-            Text(
-                text = File(folderPath).name,
-                fontSize = 24.sp,
-                modifier = Modifier.padding(end = 16.dp)
-            )
-            Button(
-                onClick = {},
-                modifier = Modifier.padding(end = 16.dp)
-            ) {
-                Text("場所を変更")
+            Row(modifier = Modifier.weight(6f).fillMaxWidth()) {
+                Text(
+                    text = File(folderPath).name,
+                    fontSize = 24.sp,
+                    modifier = Modifier.padding(end = 16.dp)
+                )
+                Button(
+                    onClick = {},
+                    modifier = Modifier.padding(end = 16.dp)
+                ) {
+                    Text("場所を変更")
+                }
+                Button(
+                    onClick = {},
+                    modifier = Modifier.padding(end = 16.dp)
+                ) {
+                    Text("リロード")
+                }
             }
-            Button(
-                onClick = {},
-                modifier = Modifier.padding(end = 16.dp)
-            ) {
-                Text("リロード")
+            Row(modifier = Modifier.weight(1f)) {
+                Button(
+                    onClick = {
+                        isLoggingOut = true
+                        loggingOut()
+                    },
+                ) {
+                    Text("ログアウト")
+                }
             }
         }
         LazyVerticalGrid(
@@ -214,8 +243,10 @@ fun MediaGalleryScreen(
                 }
             }
             item {
-                if (lazyPagingItems.loadState.append is androidx.paging.LoadState.Error) {
-                    ErrorMessage(viewModel.uiState)
+                if (lazyPagingItems.loadState.hasError) {
+                    LazyErrorMessage(viewModel.uiState, onReload = {
+                        lazyPagingItems.retry()
+                    })
                 }
             }
         }
@@ -248,6 +279,8 @@ fun MediaGridItem(
     onClick: (MediaItem) -> Unit
 ) {
     val context = LocalContext.current
+    // httpアクセス時に例外が投げられた場合は、表示がうまくいかなくなるだけなので
+    // ここでは敢えて処理しない。
     val request = if (hasThumbnail(item)) ImageRequest.Builder(context)
         .data("https://content.dropboxapi.com/2/files/get_thumbnail_v2")
         .httpMethod("POST")

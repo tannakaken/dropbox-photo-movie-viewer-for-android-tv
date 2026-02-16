@@ -24,6 +24,9 @@ media3Compose = "1.9.0"
 
 paging3 = "3.4.0"
 
+datastorePreference = "1.1.1"
+tinkAndroid = "1.13.0"
+
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
@@ -70,6 +73,9 @@ media3-ui-compose = { module = "androidx.media3:media3-ui-compose", version.ref 
 paging3-runtime = { module = "androidx.paging:paging-runtime", version.ref = "paging3" }
 paging3-compose = { module = "androidx.paging:paging-compose", version.ref = "paging3" }
 
+datastore-preference = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePreference" }
+tink-android = { module = "com.google.crypto.tink:tink-android", version.ref = "tinkAndroid" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
@@ -102,4 +108,9 @@ media3Compose = [
 paging3 = [
     "paging3-runtime",
     "paging3-compose",
+]
+
+securePreference = [
+    "datastore-preference",
+    "tink-android"
 ]

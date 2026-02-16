@@ -25,12 +25,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.ktor.client.plugins.ClientRequestException
-import io.ktor.client.plugins.ServerResponseException
-import io.ktor.utils.io.errors.IOException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -52,7 +50,9 @@ sealed interface AuthUiState {
 }
 
 @HiltViewModel
-class AuthViewModel @Inject constructor() : ViewModel() {
+class AuthViewModel @Inject constructor(
+    private val secureAuthStorage: SecureAuthStorage
+) : ViewModel() {
     private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Initial)
     val uiState : StateFlow<AuthUiState> = _uiState.asStateFlow()
     private val apiService = ApiService(BuildConfig.API_BASE_URL, DropboxPhotoAndMovieViewerApplication.client)
@@ -63,55 +63,92 @@ class AuthViewModel @Inject constructor() : ViewModel() {
         deviceGenerateId = uuidString
         return try {
             apiService.startOAuthFlow(uuidString)
-        } catch (error: ClientRequestException) {
-            _uiState.value = AuthUiState.Error(clientErrorMessage)
-            null
-        } catch (error: ServerResponseException) {
-            _uiState.value = AuthUiState.Error(serverErrorMessage)
-            null
-        } catch (error: IOException) {
-            Log.d("AuthScreen", error.message.orEmpty())
-            _uiState.value = AuthUiState.Error(networkErrorMessage)
-            null
         } catch (error: Exception) {
-            _uiState.value = AuthUiState.Error(unknownErrorMessage)
+            _uiState.value = AuthUiState.Error(error.message.orEmpty())
             null
         }
     }
 
     fun startAuth() {
         viewModelScope.launch {
-            val response = startOauthFlow()
-            response?.let {
-                val qrUrl = "${BuildConfig.API_BASE_URL}?state=${response.state}"
-                Log.d(TAG, qrUrl)
-                _uiState.value = AuthUiState.Waiting(
-                    qrUrl = qrUrl,
-                    remainingMinutes = 10
+            val auth = secureAuthStorage.getAuth().first()
+            if (auth != null) {
+                _uiState.value = AuthUiState.Authorized(
+                    deviceId = auth.deviceId,
+                    accessToken = auth.accessToken,
+                    refreshToken =  auth.refreshToken,
+                    deviceGenerateId = auth.deviceGenerateId,
                 )
-                val repository = PollingRepository(apiService)
-                repository.pollWithAdaptiveInterval(
-                    state = response.state,
-                    deviceGenerateId = deviceGenerateId!!,
-                    tmpToken = response.tmpToken)
-                    .collect {result ->
+            } else {
+                startOauthFlow()?.let { response ->
+                    val qrUrl = "${BuildConfig.API_BASE_URL}?state=${response.state}"
+                    Log.d(TAG, qrUrl)
+                    _uiState.value = AuthUiState.Waiting(
+                        qrUrl = qrUrl,
+                        remainingMinutes = 10
+                    )
+                    val repository = PollingRepository(apiService)
+                    repository.pollWithAdaptiveInterval(
+                        state = response.state,
+                        deviceGenerateId = deviceGenerateId!!,
+                        tmpToken = response.tmpToken
+                    ).collect { result ->
                         _uiState.value = when (result) {
                             is PollingResult.InProgress -> AuthUiState.Waiting(
                                 qrUrl = qrUrl,
                                 remainingMinutes = 10 - (result.elapsedSeconds / 60)
                             )
-                            is PollingResult.Success -> AuthUiState.Authorized(
-                                deviceId = result.deviceId,
-                                accessToken = result.accessToken,
-                                refreshToken =  result.refreshToken,
-                                deviceGenerateId = deviceGenerateId!!,
-                            )
+                            is PollingResult.Success -> {
+                                val deviceGenerateId = deviceGenerateId!!
+                                secureAuthStorage.saveAuth(
+                                    Auth(
+                                        deviceId = result.deviceId,
+                                        accessToken = result.accessToken,
+                                        refreshToken = result.refreshToken,
+                                        deviceGenerateId = deviceGenerateId,
+                                    )
+                                )
+                                AuthUiState.Authorized(
+                                    deviceId = result.deviceId,
+                                    accessToken = result.accessToken,
+                                    refreshToken = result.refreshToken,
+                                    deviceGenerateId = deviceGenerateId,
+                                )
+                            }
                             is PollingResult.Timeout -> AuthUiState.Initial
                             is PollingResult.Error -> AuthUiState.Error(
                                 message = result.message
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+
+    fun onAuth(
+        deviceId: String,
+        accessToken: String,
+        refreshToken: String,
+        deviceGenerateId: String,
+        handleDropboxAccessToken: (dropboxAccessToken: String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                val response = apiService.getDropboxAccessToken(
+                    deviceId,
+                    accessToken,
+                    refreshToken,
+                    deviceGenerateId
+                ) { newAccessToken: String, newRefreshToken: String ->
+                    secureAuthStorage.updateTokens(newAccessToken, newRefreshToken)
+                }
+                handleDropboxAccessToken(response.dropboxAccessToken)
+            } catch (_: ForceLoggingOutException) {
+                secureAuthStorage.clearAuth()
+                _uiState.value = AuthUiState.Initial
+            } catch (error: Exception) {
+                _uiState.value = AuthUiState.Error(error.message.orEmpty())
             }
         }
     }
@@ -125,7 +162,7 @@ class AuthViewModel @Inject constructor() : ViewModel() {
 @Composable
 fun AuthScreen(
     viewModel: AuthViewModel = hiltViewModel(),
-    onAuthorized: suspend (deviceId: String, accessToken: String, refreshToken: String, deviceGenerateId: String) -> Unit,
+    handleDropboxAccessToken: (dropboxAccessToken: String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -145,12 +182,20 @@ fun AuthScreen(
         }
         is AuthUiState.Authorized -> {
             LaunchedEffect(Unit) {
-                onAuthorized(state.deviceId, state.accessToken, state.refreshToken, state.deviceGenerateId)
+                viewModel.onAuth(
+                    deviceId = state.deviceId,
+                    accessToken = state.accessToken,
+                    refreshToken = state.refreshToken,
+                    deviceGenerateId = state.deviceGenerateId,
+                    handleDropboxAccessToken = handleDropboxAccessToken
+                )
             }
             LoadingScreen()
         }
         is AuthUiState.Error -> {
-            ErrorScreen(state.message)
+            ErrorScreen(state.message, onReload = {
+                viewModel.startAuth()
+            })
         }
     }
 }

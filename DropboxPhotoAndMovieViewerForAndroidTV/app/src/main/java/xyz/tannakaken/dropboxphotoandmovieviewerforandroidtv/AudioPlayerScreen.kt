@@ -10,56 +10,32 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import androidx.compose.foundation.layout.Box
 import androidx.media3.common.util.UnstableApi
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import coil3.annotation.InternalCoilApi
 import coil3.util.MimeTypeMap
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import javax.inject.Inject
 
-@HiltViewModel
-class AudioPlayerViewModel @Inject constructor() : ViewModel() {
-
-    private val _audioUrl = MutableStateFlow<String?>(null)
-    val audioUrl: StateFlow<String?> = _audioUrl.asStateFlow()
-
-    fun loadAudio(path: String, dropboxClient: DropboxClient) {
-        viewModelScope.launch {
-            _audioUrl.value = dropboxClient.getTemporaryLink(path)
-        }
+@Composable
+fun AudioPlayerScreen(
+    path: String,
+    loggingOut: () -> Unit,
+) {
+    DropboxAssetTemplate(path, loggingOut) { audioUrl ->
+        AudioPlayerContent(path, audioUrl)
     }
 }
 
-
-@androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(InternalCoilApi::class)
 @Composable
-fun AudioPlayerScreen(
-    viewModel: VideoPlayerViewModel = hiltViewModel(),
+fun AudioPlayerContent(
     path: String,
+    audioUrl: String,
 ) {
-    val dropboxAccessToken = LocalDropboxAccessToken.current!!
-    val dropboxClient = DropboxClient(dropboxAccessToken, DropboxPhotoAndMovieViewerApplication.client)
     val context = LocalContext.current
-    val audioUrl by viewModel.videoUrl.collectAsState()
-
-    if (audioUrl == null) {
-        LaunchedEffect(path) {
-            viewModel.loadVideo(path, dropboxClient)
-        }
-        LoadingScreen()
-        return
-    }
 
     /**
      * デフォルトのシーク秒数は10秒
@@ -71,8 +47,8 @@ fun AudioPlayerScreen(
             .setSeekBackIncrementMs(defaultSeekMilliseconds)
             .setSeekForwardIncrementMs(defaultSeekMilliseconds)
             .build().apply {
-            playWhenReady = true
-        }
+                playWhenReady = true
+            }
     }
     var isPlaying by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }

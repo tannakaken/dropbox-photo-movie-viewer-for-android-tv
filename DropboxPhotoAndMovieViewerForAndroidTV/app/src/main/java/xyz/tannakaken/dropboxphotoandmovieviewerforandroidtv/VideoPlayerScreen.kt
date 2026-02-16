@@ -4,15 +4,11 @@ import android.util.Log
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import android.media.MediaMetadataRetriever
@@ -21,9 +17,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.media3.common.util.UnstableApi
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -33,43 +26,25 @@ import androidx.media3.ui.compose.PlayerSurface
 import androidx.media3.ui.compose.SURFACE_TYPE_TEXTURE_VIEW
 import coil3.annotation.InternalCoilApi
 import coil3.util.MimeTypeMap
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import javax.inject.Inject
 
-@HiltViewModel
-class VideoPlayerViewModel @Inject constructor() : ViewModel() {
-
-    private val _videoUrl = MutableStateFlow<String?>(null)
-    val videoUrl: StateFlow<String?> = _videoUrl.asStateFlow()
-
-    fun loadVideo(path: String, dropboxClient: DropboxClient) {
-        viewModelScope.launch {
-            _videoUrl.value = dropboxClient.getTemporaryLink(path)
-        }
+@Composable
+fun VideoPlayerScreen(
+    path: String,
+    loggingOut: () -> Unit,
+) {
+    DropboxAssetTemplate(path, loggingOut) { videoUrl ->
+        VideoPlayerContent(path, videoUrl)
     }
 }
-
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(InternalCoilApi::class)
 @Composable
-fun VideoPlayerScreen(
-    viewModel: VideoPlayerViewModel = hiltViewModel(),
+fun VideoPlayerContent(
     path: String,
+    videoUrl: String,
 ) {
-    val dropboxAccessToken = LocalDropboxAccessToken.current!!
-    val dropboxClient = DropboxClient(dropboxAccessToken, DropboxPhotoAndMovieViewerApplication.client)
     val context = LocalContext.current
-    val videoUrl by viewModel.videoUrl.collectAsState()
-
-    if (videoUrl == null) {
-        LaunchedEffect(path) {
-            viewModel.loadVideo(path, dropboxClient)
-        }
-        LoadingScreen()
-        return
-    }
 
     /**
      * デフォルトのシーク秒数は10秒
@@ -81,8 +56,8 @@ fun VideoPlayerScreen(
             .setSeekBackIncrementMs(defaultSeekMilliseconds)
             .setSeekForwardIncrementMs(defaultSeekMilliseconds)
             .build().apply {
-            playWhenReady = true
-        }
+                playWhenReady = true
+            }
     }
     var isPlaying by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }

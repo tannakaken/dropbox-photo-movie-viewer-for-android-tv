@@ -34,7 +34,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URL
-import javax.inject.Inject
 import androidx.core.graphics.createBitmap
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.focus.FocusRequester
@@ -43,44 +42,97 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 
-@HiltViewModel
-class PDFViewModel @Inject constructor() : ViewModel() {
+@HiltViewModel(assistedFactory = PDFViewModel.Factory::class)
+class PDFViewModel @AssistedInject constructor(
+    secureAuthStorage: SecureAuthStorage,
+    @Assisted private val dropboxAccessToken: String,
+) : ViewModel() {
 
     private val _pdfFile = MutableStateFlow<File?>(null)
 
     val pdfFile: StateFlow<File?> = _pdfFile.asStateFlow()
+    val withRetry = createWithRetry<String>(dropboxAccessToken, secureAuthStorage)
+    private val _forceLoggingOut = MutableStateFlow(false)
+    val forceLoggingOut = _forceLoggingOut.asStateFlow()
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage = _errorMessage.asStateFlow()
 
-    fun loadPDF(path: String, cacheDir: File, dropboxClient: DropboxClient) {
+    fun loadPDF(path: String, cacheDir: File) {
         val file = File(cacheDir, "temp_pdf_${System.currentTimeMillis()}.pdf")
         viewModelScope.launch {
-            val pfrUrl = dropboxClient.getTemporaryLink(path)
-            // メインスレッドでのネットワーク接続は禁じられている。
-            withContext(Dispatchers.IO) {
-                URL(pfrUrl).openStream().use { input ->
-                    file.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
+            _errorMessage.value = null
+            try {
+                val pdfUrl = withRetry { dropboxClient ->
+                    dropboxClient.getTemporaryLink(path)
                 }
-                _pdfFile.value = file
+                // メインスレッドでのネットワーク接続は禁じられている。
+                withContext(Dispatchers.IO) {
+                    URL(pdfUrl).openStream().use { input ->
+                        file.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    _pdfFile.value = file
+                }
+            } catch (exception: ForceLoggingOutException) {
+                _forceLoggingOut.value = true
+            } catch (exception: ServiceErrorException) {
+                _errorMessage.value = exception.message.orEmpty()
             }
-
         }
     }
+
+    @AssistedFactory
+    interface Factory {
+        fun create(
+            dropboxAccessToken: String,
+        ): PDFViewModel
+    }
+
 }
 
 @Composable
 fun PDFScreen(
-    viewModel: PDFViewModel = hiltViewModel(),
     path: String,
+    loggingOut: () -> Unit,
 ) {
     val dropboxAccessToken = LocalDropboxAccessToken.current!!
+    val viewModel = hiltViewModel<PDFViewModel, PDFViewModel.Factory>(
+        creationCallback = { factory ->
+            factory.create(dropboxAccessToken)
+        }
+    )
     val pdfFile by viewModel.pdfFile.collectAsState()
+    val forceLoggingOut by viewModel.forceLoggingOut.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+
+    if (forceLoggingOut) {
+        LaunchedEffect(Unit) {
+            loggingOut()
+        }
+        LoadingScreen()
+        return
+    }
+
+    if (errorMessage != null) {
+        val context = LocalContext.current
+        ErrorScreen(
+            errorMessage.orEmpty(),
+            onReload = {
+                viewModel.loadPDF(path, context.cacheDir)
+            }
+        )
+        return
+    }
+
     if (pdfFile == null) {
-        val dropboxClient = DropboxClient(dropboxAccessToken, DropboxPhotoAndMovieViewerApplication.client)
         val context = LocalContext.current
         LaunchedEffect(path) {
-            viewModel.loadPDF(path, context.cacheDir, dropboxClient)
+            viewModel.loadPDF(path, context.cacheDir)
         }
         LoadingScreen()
         return
@@ -126,15 +178,16 @@ fun PdfViewer(pdfFile: File) {
                     .fillMaxSize()
                     .onKeyEvent { keyEvent ->
                         if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN) {
+                            // 左右は本を読む方向と必ずしも一致しないので上下で操作する。
                             when (keyEvent.nativeKeyEvent.keyCode) {
-                                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                                KeyEvent.KEYCODE_DPAD_DOWN -> {
                                     if (currentPage < pageCount - 1) {
                                         ++currentPage
                                     }
                                     true
                                 }
 
-                                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                                KeyEvent.KEYCODE_DPAD_UP -> {
                                     if (0 < currentPage) {
                                         --currentPage
                                     }

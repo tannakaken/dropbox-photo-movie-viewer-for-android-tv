@@ -12,17 +12,25 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
 import androidx.tv.material3.Surface
 import xyz.tannakaken.dropboxphotoandmovieviewerforandroidtv.ui.theme.DropboxPhotoAndMovieViewerForAndroidTVTheme
 import androidx.navigation.compose.NavHost
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import javax.inject.Inject
 
 val LocalDropboxAccessToken = compositionLocalOf<String?> { null }
 
@@ -47,7 +55,6 @@ sealed interface AppRoute {
 
     /**
      * Dropboxの特定のフォルダの画像・動画一覧を表示するページ。
-     *  Dropboxのフォルダにおいて、ルートフォルダは"/"ではなく""でアクセスするのが正しい。
      */
     @Serializable
     data class DropboxImagesAndMoviesRoute(
@@ -87,19 +94,48 @@ sealed interface AppRoute {
     )
 }
 
+@HiltViewModel
+class MainViewModel @Inject constructor(
+    private val secureAuthStorage: SecureAuthStorage
+) : ViewModel() {
+    private val apiService = ApiService(BuildConfig.API_BASE_URL, DropboxPhotoAndMovieViewerApplication.client)
+    fun loggingOut(onLoggingOut: () -> Unit) {
+        viewModelScope.launch {
+            val auth = secureAuthStorage.getAuth().first()
+            if (auth != null) {
+                apiService.loggingOut(
+                    auth.deviceId,
+                    auth.accessToken,
+                    auth.deviceGenerateId
+                )
+                onLoggingOut()
+            }
+        }
+    }
+}
+
 @Composable
 fun AppNavigation(
-    onAuthorized: suspend (deviceId: String, accessToken: String, refreshToken: String, deviceGenerateId: String) -> Unit,
+    viewModel: MainViewModel = hiltViewModel(),
+    handleDropboxAccessToken: (dropboxAccessToken: String) -> Unit,
 ) {
     val navController = rememberNavController()
+    val loggingOut = remember {
+        {
+            viewModel.loggingOut {
+                navController.navigate(AppRoute.AuthRoute)
+            }
+        }
+    }
 
     NavHost(
         navController = navController,
         startDestination = AppRoute.AuthRoute
     ) {
         composable<AppRoute.AuthRoute> {
-            AuthScreen { deviceId, accessToken, refreshToken, deviceGenerateId ->
-                onAuthorized(deviceId, accessToken, refreshToken, deviceGenerateId)
+            AuthScreen { dropboxAccessToken ->
+                handleDropboxAccessToken(dropboxAccessToken)
+                // Dropboxのフォルダにおいて、ルートフォルダは"/"ではなく""でアクセスするのが正しい。
                 navController.navigate(AppRoute.DropboxFoldersRoute(""))
             }
         }
@@ -110,7 +146,8 @@ fun AppNavigation(
                 handleFolderMove = { folderPath ->
                     navController.navigate(AppRoute.DropboxFoldersRoute(folderPath))
                 },
-                onSelect = {folderPath ->
+                loggingOut = loggingOut,
+                onSelect = { folderPath ->
                     navController.navigate(AppRoute.DropboxImagesAndMoviesRoute(
                         folderPath = folderPath,
                     ))
@@ -121,6 +158,7 @@ fun AppNavigation(
             val route = it.toRoute<AppRoute.DropboxImagesAndMoviesRoute>()
             MediaGalleryScreen(
                 folderPath = route.folderPath,
+                loggingOut = loggingOut,
             ) { mediaItem ->
                 when (mediaItem.type) {
                     MediaType.VIDEO -> {
@@ -157,25 +195,29 @@ fun AppNavigation(
         composable<AppRoute.ImageRoute> {
             val route = it.toRoute<AppRoute.ImageRoute>()
             FullImageScreen(
-                path = route.path
+                path = route.path,
+                loggingOut = loggingOut,
             )
         }
         composable<AppRoute.VideoRoute> {
             val route = it.toRoute<AppRoute.VideoRoute>()
             VideoPlayerScreen(
-                path = route.path
+                path = route.path,
+                loggingOut = loggingOut,
             )
         }
         composable<AppRoute.AudioRoute> {
             val route = it.toRoute<AppRoute.AudioRoute>()
             AudioPlayerScreen(
-                path = route.path
+                path = route.path,
+                loggingOut = loggingOut,
             )
         }
         composable<AppRoute.PdfRoute> {
             val route = it.toRoute<AppRoute.PdfRoute>()
             PDFScreen(
-                path = route.path
+                path = route.path,
+                loggingOut = loggingOut,
             )
         }
     }
@@ -193,14 +235,9 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         shape = RectangleShape
                     ) {
-                        AppNavigation(
-                            onAuthorized = {
-                                    deviceId, accessToken, refreshToken, deviceGenerateId ->
-                                val apiService = ApiService(BuildConfig.API_BASE_URL, DropboxPhotoAndMovieViewerApplication.client)
-                                val response = apiService.getDropboxAccessToken(deviceId, accessToken, deviceGenerateId)
-                                dropboxAccessToken = response.dropboxAccessToken
-                            }
-                        )
+                        AppNavigation { newDropboxAccessToken ->
+                            dropboxAccessToken = newDropboxAccessToken
+                        }
                     }
                 }
             }

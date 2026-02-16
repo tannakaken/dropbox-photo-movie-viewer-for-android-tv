@@ -91,9 +91,19 @@ class WeakCache<K, V> {
     }
 }
 
+fun mediaType(filename: String): MediaType? =
+    when (filename.substringAfterLast('.', "").lowercase()) {
+        "jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif" -> MediaType.IMAGE
+        "mp4", "mov", "avi", "mkv", "webm", "m4v" -> MediaType.VIDEO
+        "mp3", "m4a", "aac", "wav", "flac", "ogg", "opus", "amr", "3gp" -> MediaType.AUDIO
+        "pdf" -> MediaType.PDF
+        else -> null
+    }
+
+class DropboxTokenExpireException: Exception("Dropbox token expires")
+
 class DropboxClient(private val accessToken: String, private val client: HttpClient) {
     private val json = Json { ignoreUnknownKeys = true }
-
 
     suspend fun digestFolder(path: String): Pair<FolderDigest, String?> {
         val cache = cacheStoreForPath.get(path)
@@ -106,6 +116,14 @@ class DropboxClient(private val accessToken: String, private val client: HttpCli
                 append(HttpHeaders.ContentType, "application/json")
             }
             setBody("""{"path": "$path", "recursive": false, "include_media_info": true}""")
+        }
+
+        if (response.status.value == 401) {
+            throw DropboxTokenExpireException()
+        }
+
+        if (response.status.value / 100 == 5) {
+            throw ServiceErrorException(dropboxErrorMessage)
         }
 
         val responseBody = response.bodyAsText()
@@ -130,6 +148,14 @@ class DropboxClient(private val accessToken: String, private val client: HttpCli
             setBody("""{"cursor": "$cursor"}""")
         }
 
+        if (response.status.value == 401) {
+            throw DropboxTokenExpireException()
+        }
+
+        if (response.status.value / 100 == 5) {
+            throw ServiceErrorException(dropboxErrorMessage)
+        }
+
         val responseBody = response.bodyAsText()
         val listFolderResponse = json.decodeFromString<ListFolderResponse>(responseBody)
         val digest = aggregateMetadata(listFolderResponse.entries)
@@ -138,15 +164,6 @@ class DropboxClient(private val accessToken: String, private val client: HttpCli
         cacheStoreForCursor.put(cursor, result)
         return result
     }
-
-    fun mediaType(filename: String): MediaType? =
-        when (filename.substringAfterLast('.', "").lowercase()) {
-            "jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif" -> MediaType.IMAGE
-            "mp4", "mov", "avi", "mkv", "webm", "m4v" -> MediaType.VIDEO
-            "mp3", "m4a", "aac", "wav", "flac", "ogg", "opus", "amr", "3gp" -> MediaType.AUDIO
-            "pdf" -> MediaType.PDF
-            else -> null
-        }
 
     private fun aggregateMetadata(entries: List<Metadata>): FolderDigest {
         val digest = MutableFolderDigest()
@@ -168,6 +185,14 @@ class DropboxClient(private val accessToken: String, private val client: HttpCli
                 append(HttpHeaders.ContentType, "application/json")
             }
             setBody("""{"path": "$path"}""")
+        }
+
+        if (response.status.value == 401) {
+            throw DropboxTokenExpireException()
+        }
+
+        if (response.status.value / 100 == 5) {
+            throw ServiceErrorException(dropboxErrorMessage)
         }
 
         val responseBody = response.bodyAsText()

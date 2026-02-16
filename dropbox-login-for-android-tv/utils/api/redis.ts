@@ -9,7 +9,7 @@ const redisClient = new Redis({
 });
 
 const constructFlowIdKey = (state: string): string => `android-tv-dropbox-flow-id-${state}`;
-// ステートの製造時間は10分
+// ステートの生存時間は10分
 const STATE_TTL_SECONDS = 600;
 
 export const setFlowData = async (state: string, flowData: FlowData, setExpire = false) => {
